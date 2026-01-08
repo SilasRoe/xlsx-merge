@@ -89,28 +89,20 @@ def main():
     prio2 = input("Priorität 2 Spalte (Name): ").strip()
 
     sort_cols = []
+    
     for col_name in [prio1, prio2]:
         if col_name and col_name in df_combined.columns:
-            if pd.api.types.is_datetime64_any_dtype(df_combined[col_name]):
-                sort_cols.append(col_name)
-                continue
-
-            try:
-                df_combined[col_name] = pd.to_datetime(
-                    df_combined[col_name], 
-                    dayfirst=True, 
-                    errors='coerce'
-                )
-                sort_cols.append(col_name)
-            except Exception:
-                sort_cols.append(col_name)
+            temp_series = pd.to_datetime(df_combined[col_name], dayfirst=True, errors='coerce')
+            
+            if temp_series.notna().sum() > 0:
+                df_combined[col_name] = temp_series
+            else:
+                pass
+            
+            sort_cols.append(col_name)
 
     if sort_cols:
-        df_combined = df_combined.sort_values(
-            by=sort_cols, 
-            ascending=[True]*len(sort_cols),
-            na_position='last'
-        )
+        df_combined = df_combined.sort_values(by=sort_cols, ascending=[True]*len(sort_cols), na_position='last')
         print(f"Sortiert nach {sort_cols}")
 
     print(f"\nSchreibe Datei: {tgt_path} ...")
