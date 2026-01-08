@@ -53,6 +53,14 @@ def main():
     src_cols = df_src.columns.tolist()
     mapping = {}
 
+    print("Verfügbare Quell-Spalten:")
+    for col in src_cols:
+        print(f" - {col}")
+
+    print("\nVerfügbare Ziel-Spalten:")
+    for col in tgt_cols:
+        print(f" - {col}")
+
     for tgt_col in tgt_cols:
         is_formula = tgt_col in formula_map
         note = " (FORMEL)" if is_formula else ""
@@ -81,16 +89,28 @@ def main():
     prio2 = input("Priorität 2 Spalte (Name): ").strip()
 
     sort_cols = []
-    for col in [prio1, prio2]:
-        if col and col in df_combined.columns:
+    for col_name in [prio1, prio2]:
+        if col_name and col_name in df_combined.columns:
+            if pd.api.types.is_datetime64_any_dtype(df_combined[col_name]):
+                sort_cols.append(col_name)
+                continue
+
             try:
-                df_combined[col] = pd.to_datetime(df_combined[col], dayfirst=True)
-                sort_cols.append(col)
-            except:
-                pass
+                df_combined[col_name] = pd.to_datetime(
+                    df_combined[col_name], 
+                    dayfirst=True, 
+                    errors='coerce'
+                )
+                sort_cols.append(col_name)
+            except Exception:
+                sort_cols.append(col_name)
 
     if sort_cols:
-        df_combined = df_combined.sort_values(by=sort_cols, ascending=[True]*len(sort_cols))
+        df_combined = df_combined.sort_values(
+            by=sort_cols, 
+            ascending=[True]*len(sort_cols),
+            na_position='last'
+        )
         print(f"Sortiert nach {sort_cols}")
 
     print(f"\nSchreibe Datei: {tgt_path} ...")
