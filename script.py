@@ -1,143 +1,147 @@
 import pandas as pd
-import sys
-import os
+import numpy as np
 from openpyxl import load_workbook
 from openpyxl.formula.translate import Translator
-from openpyxl.utils.dataframe import dataframe_to_rows
+from copy import copy
+import os
+from datetime import datetime
 
-def get_formula_templates(sheet, header_row=1):
-    formulas = {}
-    data_row_idx = header_row + 1
-    
-    headers = [cell.value for cell in sheet[header_row]]
-    
-    if sheet.max_row < data_row_idx:
-        return {}
+def to_excel_serial(val):
+    """Wandelt ein Datum in die Excel-Serial-Nummer (Float) um."""
+    if pd.isna(val):
+        return None
+    # Basis-Datum für Excel (Windows Standard)
+    delta = val - datetime(1899, 12, 30)
+    return float(delta.days) + (float(delta.seconds) / 86400)
 
-    for col_idx, cell in enumerate(sheet[data_row_idx], start=0):
-        if isinstance(cell.value, str) and cell.value.startswith("="):
-            col_name = headers[col_idx] if col_idx < len(headers) else None
-            if col_name:
-                formulas[col_name] = cell.value
-                print(f"-> Formel erkannt in Spalte '{col_name}': {cell.value}")
-    
-    return formulas
-
-def main():
-    src_path = input("Pfad zur Quelldatei (.xlsx): ").strip().strip('"')
-    tgt_path = input("Pfad zur Zieldatei (.xlsx): ").strip().strip('"')
-
-    if not os.path.exists(src_path) or not os.path.exists(tgt_path):
+def merge_and_sort_excel(source_path: str, target_path: str):
+    if not os.path.exists(source_path) or not os.path.exists(target_path):
         print("Fehler: Dateien nicht gefunden.")
-        sys.exit(1)
+        return
 
-    print("Lade Dateien...")
-    try:
-        wb = load_workbook(tgt_path)
-        ws = wb.active
-        formula_map = get_formula_templates(ws)
-        wb.close()
+    # --- 1. Analyse der Zieldatei ---
+    print("Lade Zieldatei...")
+    wb = load_workbook(target_path)
+    ws = wb.active
 
-        df_src = pd.read_excel(src_path)
-        df_tgt = pd.read_excel(tgt_path)
-        
-        df_src.columns = df_src.columns.astype(str)
-        df_tgt.columns = df_tgt.columns.astype(str)
+    target_headers = {cell.value: cell.column for cell in ws[1] if cell.value}
+    header_names = list(target_headers.keys())
+    
+    # Template-Infos sichern (Formatierung & Formeln)
+    template_info = {} 
+    if ws.max_row >= 2:
+        for col_idx in range(1, ws.max_column + 1):
+            cell = ws.cell(row=2, column=col_idx)
+            template_info[col_idx] = {
+                'font': copy(cell.font),
+                'border': copy(cell.border),
+                'fill': copy(cell.fill),
+                'number_format': copy(cell.number_format), # WICHTIG: Hier steht z.B. "DD.MM.YYYY"
+                'alignment': copy(cell.alignment),
+                'protection': copy(cell.protection),
+                'is_formula': cell.data_type == 'f',
+                'formula': cell.value if cell.data_type == 'f' else None,
+                'col_letter': cell.column_letter
+            }
 
-    except Exception as e:
-        print(f"Lese-Fehler: {e}")
-        sys.exit(1)
+    # Bestandsdaten laden
+    df_target_old = pd.read_excel(target_path)
+    df_target_old = df_target_old.loc[:, ~df_target_old.columns.str.contains('^Unnamed')]
 
-    print("\n--- Spalten-Zuordnung ---")
-    tgt_cols = df_tgt.columns.tolist()
-    src_cols = df_src.columns.tolist()
+    # --- 2. Quelldaten laden & Mapping ---
+    print(f"Lade Quelldatei '{source_path}'...")
+    df_source = pd.read_excel(source_path)
+
+    print(f"\n--- Spaltenzuordnung ---")
     mapping = {}
-
-    print("Verfügbare Quell-Spalten:")
-    for col in src_cols:
-        print(f" - {col}")
-
-    print("\nVerfügbare Ziel-Spalten:")
-    for col in tgt_cols:
-        print(f" - {col}")
-
-    for tgt_col in tgt_cols:
-        is_formula = tgt_col in formula_map
-        note = " (FORMEL)" if is_formula else ""
-        
-        if is_formula:
-            print(f"Ziel '{tgt_col}' wird automatisch berechnet.{note}")
+    for t_col in header_names:
+        col_idx = target_headers[t_col]
+        # Formel-Spalten überspringen
+        if template_info.get(col_idx, {}).get('is_formula'):
             continue
 
-        default = tgt_col if tgt_col in src_cols else ""
-        suggestion = f" [Enter für '{default}']" if default else ""
+        s_col = input(f"Quelle für Ziel '{t_col}'? (Enter für leer): ").strip()
+        if s_col in df_source.columns:
+            mapping[t_col] = s_col
 
-        user_input = input(f"Ziel '{tgt_col}' <- Quelle?{suggestion}: ").strip()
-        src_col = user_input if user_input else default
-        
-        if src_col and src_col in src_cols:
-            mapping[tgt_col] = src_col
+    # DataFrame zusammenbauen
+    df_new_data = pd.DataFrame()
+    for t_col in header_names:
+        if t_col in mapping:
+            df_new_data[t_col] = df_source[mapping[t_col]]
+        else:
+            df_new_data[t_col] = None
 
-    data_to_append = pd.DataFrame()
-    for tgt_col, src_col in mapping.items():
-        data_to_append[tgt_col] = df_src[src_col]
+    # --- 3. Merge & Clean Up Dates ---
+    df_target_old = df_target_old[header_names] if not df_target_old.empty else pd.DataFrame(columns=header_names)
+    df_total = pd.concat([df_target_old, df_new_data], ignore_index=True)
 
-    df_combined = pd.concat([df_tgt, data_to_append], ignore_index=True)
+    # DATUM KONVERTIERUNG (Fix für Type Error)
+    print("Konvertiere Datumsformate in Excel-Zahlen...")
+    for col in df_total.columns:
+        # Prüfen, ob Spalte wie ein Datum aussieht (datetime64)
+        if pd.api.types.is_datetime64_any_dtype(df_total[col]):
+            # Umwandlung: Timestamp -> Python Datetime -> Excel Serial Float
+            df_total[col] = df_total[col].apply(lambda x: to_excel_serial(pd.to_datetime(x)) if pd.notnull(x) else None)
 
+    # --- 4. Sortieren ---
     print("\n--- Sortierung ---")
-    prio1 = input("Priorität 1 Spalte (Name): ").strip()
-    prio2 = input("Priorität 2 Spalte (Name): ").strip()
-
-    sort_cols = []
+    sort_col = input(f"Nach welcher Ziel-Spalte sortieren? ({', '.join(header_names)}): ").strip()
     
-    for col_name in [prio1, prio2]:
-        if col_name and col_name in df_combined.columns:
-            temp_series = pd.to_datetime(df_combined[col_name], dayfirst=True, errors='coerce')
+    if sort_col in df_total.columns:
+        print(f"Sortiere {len(df_total)} Zeilen nach '{sort_col}'...")
+        try:
+            # Versuch 1: Normale Sortierung (korrekt für reine Zahlen/Datumsangaben)
+            df_total = df_total.sort_values(by=sort_col)
+        except TypeError:
+            # Fallback: Bei gemischten Typen (int vs str) als String sortieren, um Crash zu verhindern
+            print(f"Warnung: Spalte '{sort_col}' enthält gemischte Datentypen. Sortiere als Text.")
+            df_total = df_total.sort_values(by=sort_col, key=lambda x: x.astype(str))
+    
+    # --- 5. Schreiben ---
+    print("Schreibe Daten...")
+    start_row = 2
+    
+    for i, (_, row_data) in enumerate(df_total.iterrows()):
+        current_row = start_row + i
+        
+        for col_idx in range(1, ws.max_column + 1):
+            cell = ws.cell(row=current_row, column=col_idx)
+            header_name = ws.cell(row=1, column=col_idx).value
+            t_info = template_info.get(col_idx)
             
-            if temp_series.notna().sum() > 0:
-                df_combined[col_name] = temp_series
+            if not t_info: continue
+
+            # A) Inhalt
+            if t_info['is_formula'] and t_info['formula']:
+                origin_coord = f"{t_info['col_letter']}2"
+                target_coord = f"{t_info['col_letter']}{current_row}"
+                cell.value = Translator(t_info['formula'], origin=origin_coord).translate_formula(target_coord)
             else:
-                pass
-            
-            sort_cols.append(col_name)
-
-    if sort_cols:
-        df_combined = df_combined.sort_values(by=sort_cols, ascending=[True]*len(sort_cols), na_position='last')
-        print(f"Sortiert nach {sort_cols}")
-
-    print(f"\nSchreibe Datei: {tgt_path} ...")
-    
-    wb = load_workbook(tgt_path)
-    ws = wb.active
-    
-    if ws.max_row > 1:
-        ws.delete_rows(2, amount=ws.max_row-1)
-
-    rows = dataframe_to_rows(df_combined, index=False, header=False)
-    
-    header_list = list(df_combined.columns)
-    
-    for r_idx, row in enumerate(rows, start=2):
-        for c_idx, value in enumerate(row, start=1):
-            col_name = header_list[c_idx-1]
-            cell = ws.cell(row=r_idx, column=c_idx)
-
-            if col_name in formula_map:
-                original_formula = formula_map[col_name]
-                
-                try:
-                    translated = Translator(original_formula, origin=f"A2").translate_formula(f"A{r_idx}")
-                    cell.value = translated
-                except Exception:
-                    cell.value = value 
-            else:
-                if pd.isna(value):
+                val = row_data.get(header_name)
+                # NaN/None Behandlung
+                if pd.isna(val) or val is None:
                     cell.value = None
                 else:
-                    cell.value = value
+                    cell.value = val 
+                    # Hier wird jetzt ein Float geschrieben, falls es ein Datum war
 
-    wb.save(tgt_path)
-    print("Fertig! Formeln wurden auf alle Zeilen angewendet.")
+            # B) Styles (Hier wird das Datumsformat "DD.MM.YYYY" wiederhergestellt)
+            if t_info['number_format']:
+                cell.number_format = copy(t_info['number_format'])
+            cell.font = copy(t_info['font'])
+            cell.border = copy(t_info['border'])
+            cell.fill = copy(t_info['fill'])
+            cell.alignment = copy(t_info['alignment'])
+            cell.protection = copy(t_info['protection'])
+
+    try:
+        wb.save(target_path)
+        print(f"Erfolgreich gespeichert! ({len(df_total)} Zeilen)")
+    except PermissionError:
+        print("Fehler: Datei ist geöffnet.")
 
 if __name__ == "__main__":
-    main()
+    s = input("Quell-Datei: ").strip().strip('"')
+    t = input("Ziel-Datei: ").strip().strip('"')
+    merge_and_sort_excel(s, t)
