@@ -30,16 +30,13 @@ Dieses Python-Skript ermöglicht es, Daten aus einer Quell-Excel-Datei in eine b
    ```
 2. Dateipfade angeben: Gib den Pfad zur Quell-Datei und zur Ziel-Datei an (z. B. daten.xlsx).
 3. Spaltenzuordnung (Mapping):
-
-- Das Skript geht nacheinander alle Spalten der Ziel-Datei durch.
-- Gib für jede Ziel-Spalte den exakten Namen der Spalte aus der Quell-Datei ein.
-- Lässt du ein Feld leer, bleibt die Spalte für die neuen Daten leer (oder behält ihre Formel).
-- Hinweis: Spalten, die in der Ziel-Excel bereits Formeln enthalten, werden automatisch erkannt und übersprungen. Die Formeln werden für alle neuen Zeilen intelligent "nach unten gezogen".
-
+   - Das Skript geht nacheinander alle Spalten der Ziel-Datei durch.
+   - Gib für jede Ziel-Spalte den exakten Namen der Spalte aus der Quell-Datei ein.
+   - Lässt du ein Feld leer, bleibt die Spalte für die neuen Daten leer (oder behält ihre Formel).
+   - Hinweis: Spalten, die in der Ziel-Excel bereits Formeln enthalten, werden automatisch erkannt und übersprungen. Die Formeln werden für alle neuen Zeilen intelligent "nach unten gezogen".
 4. Sortierung:
-
-- Gib den Namen der Spalte aus der Ziel-Datei an, nach welcher der gesamte Bestand (alte und neue Daten) sortiert werden soll.
-- Das Skript erkennt Datumsangaben, Zahlen und Texte und sortiert diese entsprechend.
+   - Gib den Namen der Spalte aus der Ziel-Datei an, nach welcher der gesamte Bestand (alte und neue Daten) sortiert werden soll.
+   - Das Skript erkennt Datumsangaben, Zahlen und Texte und sortiert diese entsprechend.
 
 ---
 
