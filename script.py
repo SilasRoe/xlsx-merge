@@ -6,13 +6,11 @@ import os
 from datetime import datetime, timedelta
 
 def to_excel_serial(val):
-    """Wandelt Datum -> Excel-Serial (Float) für sauberes Sortieren."""
     if pd.isna(val): return None
     delta = val - datetime(1899, 12, 30)
     return float(delta.days) + (float(delta.seconds) / 86400)
 
 def from_excel_serial(val):
-    """Wandelt Excel-Serial (Float) -> Python datetime für sauberes Schreiben."""
     if pd.isna(val) or not isinstance(val, (int, float)): return None
     return datetime(1899, 12, 30) + timedelta(days=val)
 

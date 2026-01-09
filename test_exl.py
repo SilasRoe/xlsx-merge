@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill
 
-# --- Konfiguration ---
 ROWS_SOURCE = 5000
 ROWS_TARGET = 100
 
@@ -20,7 +19,6 @@ def generate_files():
     first_names = ["Max", "Anna", "Tom", "Lisa", "Jan", "Laura", "Tim", "Sarah", "Ben", "Julia"]
     depts = ["IT", "HR", "Sales", "Marketing", "Logistik"]
 
-    # 1. QUELLE (Chaos-Daten)
     data_src = {
         "Kunden_Ref": [f"REF-{i+1000}" for i in range(ROWS_SOURCE)],
         "Kunde_Name": [f"{random.choice(names)}, {random.choice(first_names)}" for i in range(ROWS_SOURCE)],
@@ -32,23 +30,19 @@ def generate_files():
     df_src.to_excel("quelle.xlsx", index=False)
     print(f"-> 'quelle.xlsx' erstellt ({ROWS_SOURCE} Zeilen).")
 
-    # 2. ZIEL (Saubere Struktur mit Formatierung)
-    # Spalten heißen anders, um das Mapping zu testen
     data_tgt = {
         "ID": [f"REF-{i}" for i in range(ROWS_TARGET)],
         "Vollständiger Name": [f"{random.choice(names)}, {random.choice(first_names)}" for i in range(ROWS_TARGET)],
         "Datum": [get_random_date() for _ in range(ROWS_TARGET)],
         "Umsatz": [round(random.uniform(100.0, 900.0), 2) for _ in range(ROWS_TARGET)],
-        "Steuer (Formel)": [None] * ROWS_TARGET # Platzhalter für Formel
+        "Steuer (Formel)": [None] * ROWS_TARGET
     }
     df_tgt = pd.DataFrame(data_tgt)
     df_tgt.to_excel("ziel.xlsx", index=False)
 
-    # --- Formatierung und Formeln hinzufügen (Simulation einer echten Arbeitsdatei) ---
     wb = load_workbook("ziel.xlsx")
     ws = wb.active
 
-    # Header formatieren (Fett + Gelber Hintergrund)
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     bold_font = Font(bold=True)
 
@@ -56,8 +50,6 @@ def generate_files():
         cell.font = bold_font
         cell.fill = yellow_fill
 
-    # Formeln in Spalte E schreiben (Steuer = Umsatz * 0.19)
-    # Beachte: openpyxl zählt ab 1 -> E ist Spalte 5, D ist Spalte 4
     for row in range(2, ROWS_TARGET + 2):
         ws.cell(row=row, column=5).value = f"=D{row}*0.19"
 
