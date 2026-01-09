@@ -25,7 +25,7 @@ def merge_and_sort_excel(source_path: str, target_path: str):
     wb = load_workbook(target_path)
     ws = wb.active
     
-    target_headers = {cell.value: cell.column for cell in ws.iter_rows(min_row=1, max_row=1, values_only=False) if cell.value}
+    target_headers = {cell.value: cell.column for cell in ws[1] if cell.value}
     header_names = list(target_headers.keys())
 
     template_info = {}
